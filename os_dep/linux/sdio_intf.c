@@ -21,7 +21,6 @@
 
 #include <drv_types.h>
 #include <hal_data.h>
-#include <platform_ops.h>
 
 #ifndef CONFIG_SDIO_HCI
 #error "CONFIG_SDIO_HCI shall be on!\n"
@@ -83,13 +82,15 @@ static int rtw_sdio_resume(struct device *dev);
 static int rtw_sdio_suspend(struct device *dev);
 extern void rtw_dev_unload(PADAPTER padapter);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)) 
+extern int mmc_pm_gpio_ctrl(char* name, int level);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 static const struct dev_pm_ops rtw_sdio_pm_ops = {
 	.suspend	= rtw_sdio_suspend,
 	.resume	= rtw_sdio_resume,
 };
 #endif
-	
+
 struct sdio_drv_priv {
 	struct sdio_driver r871xs_drv;
 	int drv_registered;
@@ -100,7 +101,7 @@ static struct sdio_drv_priv sdio_drvpriv = {
 	.r871xs_drv.remove = rtw_dev_remove,
 	.r871xs_drv.name = (char*)DRV_NAME,
 	.r871xs_drv.id_table = sdio_ids,
-	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)) 
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	.r871xs_drv.drv = {
 		.pm = &rtw_sdio_pm_ops,
 	}
@@ -224,8 +225,8 @@ static u8 gpio_hostwakeup_alloc_irq(PADAPTER padapter)
 	} else {
 		DBG_871X("allocate gpio irq %d ok\n", oob_irq);
 	}
-	
-#ifndef CONFIG_PLATFORM_ARM_SUN8I	
+
+#ifndef CONFIG_PLATFORM_ARM_SUN8I
 	enable_irq_wake(oob_irq);
 #endif
 	return _SUCCESS;
@@ -237,7 +238,7 @@ static void gpio_hostwakeup_free_irq(PADAPTER padapter)
 
 	if (oob_irq == 0)
 		return;
-		
+
 #ifndef CONFIG_PLATFORM_ARM_SUN8I
 	disable_irq_wake(oob_irq);
 #endif
@@ -395,9 +396,9 @@ _func_enter_;
 free_dvobj:
 	if (status != _SUCCESS && dvobj) {
 		sdio_set_drvdata(func, NULL);
-		
+
 		devobj_deinit(dvobj);
-		
+
 		dvobj = NULL;
 	}
 exit:
@@ -517,7 +518,7 @@ _adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj)
 #if defined(CONFIG_CONCURRENT_MODE)
 	//set adapter_type/iface type for primary padapter
 	padapter->isprimary = _TRUE;
-	padapter->adapter_type = PRIMARY_ADAPTER;	
+	padapter->adapter_type = PRIMARY_ADAPTER;
 	#ifndef CONFIG_HWPORT_SWAP
 	padapter->iface_type = IFACE_PORT0;
 	#else
@@ -580,9 +581,9 @@ _adapter *rtw_sdio_if1_init(struct dvobj_priv *dvobj)
 		, padapter->bup
 		, rtw_get_hw_init_completed(padapter)
 	);
-	
+
 	status = _SUCCESS;
-	
+
 free_hal_data:
 	if (status != _SUCCESS && padapter->HalData)
 		rtw_hal_free_data(padapter);
@@ -611,10 +612,10 @@ static void rtw_sdio_if1_deinit(_adapter *if1)
 #endif
 
 #ifdef CONFIG_GPIO_WAKEUP
-#ifdef CONFIG_PLATFORM_ARM_SUN6I 
+#ifdef CONFIG_PLATFORM_ARM_SUN6I
         sw_gpio_eint_set_enable(gpio_eint_wlan, 0);
         sw_gpio_irq_free(eint_wlan_handle);
-#else  
+#else
 	gpio_hostwakeup_free_irq(if1);
 #endif
 #endif
@@ -843,6 +844,8 @@ _func_enter_;
 
 _func_exit_;
 }
+
+
 extern int pm_netdev_open(struct net_device *pnetdev,u8 bnormal);
 extern int pm_netdev_close(struct net_device *pnetdev,u8 bnormal);
 
@@ -874,10 +877,10 @@ static int rtw_sdio_suspend(struct device *dev)
 		goto exit;
 	}
 
-	ret = rtw_suspend_common(padapter);		
+	ret = rtw_suspend_common(padapter);
 
 exit:
-#ifdef CONFIG_RTW_SDIO_PM_KEEP_POWER 
+#ifdef CONFIG_RTW_SDIO_PM_KEEP_POWER
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
 	//Android 4.0 don't support WIFI close power
 	//or power down or clock will close after wifi resume,
@@ -898,7 +901,7 @@ exit:
 			sdio_set_host_pm_flags(func, MMC_PM_KEEP_POWER);
 		}
 	}
-#endif	
+#endif
 #endif
 	return ret;
 }
@@ -907,14 +910,14 @@ int rtw_resume_process(_adapter *padapter)
 	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 	struct dvobj_priv *psdpriv = padapter->dvobj;
 	struct debug_priv *pdbgpriv = &psdpriv->drv_dbg;
-		
+
 	if (pwrpriv->bInSuspend == _FALSE)
 	{
 		pdbgpriv->dbg_resume_error_cnt++;
 		DBG_871X("%s bInSuspend = %d\n", __FUNCTION__, pwrpriv->bInSuspend);
 		return -1;
 	}
-	
+
 	return rtw_resume_common(padapter);
 }
 
@@ -944,7 +947,7 @@ static int rtw_sdio_resume(struct device *dev)
 		if(pwrpriv->wowlan_mode || pwrpriv->wowlan_ap_mode)
 #endif
 		{
-			rtw_resume_lock_suspend();			
+			rtw_resume_lock_suspend();
 			ret = rtw_resume_process(padapter);
 			rtw_resume_unlock_suspend();
 		}
@@ -952,15 +955,15 @@ static int rtw_sdio_resume(struct device *dev)
 		{
 #ifdef CONFIG_RESUME_IN_WORKQUEUE
 			rtw_resume_in_workqueue(pwrpriv);
-#else			
+#else
 			if (rtw_is_earlysuspend_registered(pwrpriv))
 			{
 				/* jeff: bypass resume here, do in late_resume */
 				rtw_set_do_late_resume(pwrpriv, _TRUE);
-			}	
+			}
 			else
 			{
-				rtw_resume_lock_suspend();			
+				rtw_resume_lock_suspend();
 				ret = rtw_resume_process(padapter);
 				rtw_resume_unlock_suspend();
 			}
@@ -983,7 +986,7 @@ static int __init rtw_drv_entry(void)
 	DBG_871X_LEVEL(_drv_always_, DRV_NAME" BT-Coex version = %s\n", BTCOEXVERSION);
 #endif // BTCOEXVERSION
 
-	ret = platform_wifi_power_on();
+	ret = mmc_pm_gpio_ctrl("rtk_rtl8723bs_wl_dis", 1);
 	if (ret)
 	{
 		DBG_871X("%s: power on failed!!(%d)\n", __FUNCTION__, ret);
@@ -1013,7 +1016,7 @@ static int __init rtw_drv_entry(void)
 	goto exit;
 
 poweroff:
-	platform_wifi_power_off();
+	mmc_pm_gpio_ctrl("rtk_rtl8723bs_wl_dis", 0);
 
 exit:
 	DBG_871X_LEVEL(_drv_always_, "module init ret=%d\n", ret);
@@ -1030,7 +1033,7 @@ static void __exit rtw_drv_halt(void)
 
 	rtw_android_wifictrl_func_del();
 
-	platform_wifi_power_off();
+	mmc_pm_gpio_ctrl("rtk_rtl8723bs_wl_dis", 0);
 
 	rtw_suspend_lock_uninit();
 	rtw_drv_proc_deinit();
@@ -1058,4 +1061,3 @@ int rtw_sdio_set_power(int on)
 
 module_init(rtw_drv_entry);
 module_exit(rtw_drv_halt);
-
