@@ -76,12 +76,19 @@ static const struct sdio_device_id sdio_ids[] =
 
 MODULE_DEVICE_TABLE(sdio, sdio_ids);
 
+#ifdef CONFIG_RTL8723B
+MODULE_ALIAS("sdio:c*v024CdB723*");
+#endif
+
 static int rtw_drv_init(struct sdio_func *func, const struct sdio_device_id *id);
 static void rtw_dev_remove(struct sdio_func *func);
 static int rtw_sdio_resume(struct device *dev);
 static int rtw_sdio_suspend(struct device *dev);
 extern void rtw_dev_unload(PADAPTER padapter);
 
+extern void sunximmc_rescan_card(unsigned id, unsigned insert);
+extern int mmc_pm_gpio_ctrl(char* name, int level);
+extern int mmc_pm_get_mod_type(void);
 extern int mmc_pm_gpio_ctrl(char* name, int level);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
@@ -980,6 +987,15 @@ static int __init rtw_drv_entry(void)
 {
 	int ret = 0;
 
+/*depends on sunxi power control */
+#if defined CONFIG_MMC_SUNXI_POWER_CONTROL
+    unsigned int mod_sel = mmc_pm_get_mod_type();
+	if (mod_sel != 11) {
+		printk("[rtl8723bs] %s: mod_sel = %d is incorrect.\n", __FUNCTION__, mod_sel);
+		return -1;
+	}
+#endif
+
 	DBG_871X_LEVEL(_drv_always_, "module init start\n");
 	dump_drv_version(RTW_DBGDUMP);
 #ifdef BTCOEXVERSION
@@ -1033,7 +1049,11 @@ static void __exit rtw_drv_halt(void)
 
 	rtw_android_wifictrl_func_del();
 
+#if defined(CONFIG_MMC_SUNXI_POWER_CONTROL)
+	sunximmc_rescan_card(SDIOID, 0);
 	mmc_pm_gpio_ctrl("rtk_rtl8723bs_wl_dis", 0);
+	printk("[rtl8723bs] %s: remove card, power off.\n", __FUNCTION__);
+#endif
 
 	rtw_suspend_lock_uninit();
 	rtw_drv_proc_deinit();
